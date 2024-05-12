@@ -102,6 +102,26 @@ async function run() {
     });
 
 
+    //get all request user by email in db:
+    app.get("/my-volunteerReq/:email", async (req, res) => {
+      const email = req.params.email;
+      // console.log(email)
+      const query = { organizer_email: email };
+      const result = await requestCollection.find(query).toArray();
+      res.send(result);
+    });
+
+
+    // delete from new collection:
+    app.delete("/my-volunteerReq/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log('the delete id is--------',id)
+      const query = { _id: new ObjectId(id) };
+      const result = await requestCollection.deleteOne(query);
+      res.send(result);
+    });
+
+
     //save a data in db:
     app.post("/volunteer", async (req, res) => {
       const volunteerData = req.body;
