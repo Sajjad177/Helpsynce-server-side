@@ -7,7 +7,11 @@ const port = process.env.PORT || 9000;
 const app = express();
 
 const corsOptions = {
-  origin: ["http://localhost:5175", "http://localhost:5176", "http://localhost:5173", ],
+  origin: [
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:5173",
+  ],
   credentials: true,
   optionSuccessStatus: 200,
 };
@@ -33,7 +37,7 @@ async function run() {
     // const volunteerCollection = client.db("helpSync").collection("volunteers");
     const db = client.db("helpSync");
     const volunteerCollection = db.collection("volunteers");
-    const requestCollection = db.collection("requested")
+    const requestCollection = db.collection("requested");
 
     //search function get the title:
     app.get("/volunteers", async (req, res) => {
@@ -71,14 +75,31 @@ async function run() {
       res.send(result);
     });
 
-    // save a request data in db:---------------
-    app.post("/request", async(req, res) => {
-      const requestData = req.body
-      console.log(requestData)
-      const result = await requestCollection.insertOne(requestData)
-      console.log('Request data==',result)
-      res.send(result)
+    // post a request data in db with new collection:---------------
+    app.post('/request', async(req, res) => {
+      const requestData = req.body;
+        const id = req.params.id
+        const volunteerId = new ObjectId(requestData.DataId);
+        await volunteerCollection.updateOne(
+          { _id: volunteerId },
+          {
+            $inc:{
+              number_Need:-1
+            }
+          }
+        )
+        const result = await requestCollection.insertOne(requestData)
+        res.send(result)
     })
+
+    // get a data from new collection in db
+    app.get("/request/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await requestCollection.find(query).toArray();
+      // console.log("specific data", result);
+      res.send(result);
+    });
 
 
     //save a data in db:
