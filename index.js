@@ -7,7 +7,7 @@ const port = process.env.PORT || 9000;
 const app = express();
 
 const corsOptions = {
-  origin: ["http://localhost:5175", "http://localhost:5173"],
+  origin: ["http://localhost:5175", "http://localhost:5176", "http://localhost:5173", ],
   credentials: true,
   optionSuccessStatus: 200,
 };
@@ -33,19 +33,11 @@ async function run() {
     // const volunteerCollection = client.db("helpSync").collection("volunteers");
     const db = client.db("helpSync");
     const volunteerCollection = db.collection("volunteers");
-
-    // get all data from db:
-    // app.get("/volunteers", async (req, res) => {
-    //   const result = await volunteerCollection.find().toArray();
-    //   // console.log('get data', result)
-    //   res.send(result);
-    // });
+    const requestCollection = db.collection("requested")
 
     //search function get the title:
     app.get("/volunteers", async (req, res) => {
-      // const { title } = req.body;
       const { title } = req.query;
-      // console.log("The title is", title);
       let query = {};
       if (title) {
         query = {
@@ -54,8 +46,10 @@ async function run() {
           },
         };
       }
-      const result = await volunteerCollection.find(query).toArray();
-      // console.log(result);
+      const result = await volunteerCollection
+        .find(query)
+        .sort({ deadline: 1 })
+        .toArray();
       res.send(result);
     });
 
@@ -63,9 +57,9 @@ async function run() {
     app.get("/volunteers/:email", async (req, res) => {
       const email = req.params.email;
       const query = { "contact.email": email };
-      const result = await volunteerCollection.find(query).toArray()
-      console.log('specific data',result)
-      res.send(result)
+      const result = await volunteerCollection.find(query).toArray();
+      // console.log("specific data", result);
+      res.send(result);
     });
 
     //get a single data fom db:
@@ -73,9 +67,19 @@ async function run() {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await volunteerCollection.findOne(query);
-      console.log(result);
+      // console.log(result);
       res.send(result);
     });
+
+    // save a request data in db:---------------
+    app.post("/request", async(req, res) => {
+      const requestData = req.body
+      console.log(requestData)
+      const result = await requestCollection.insertOne(requestData)
+      console.log('Request data==',result)
+      res.send(result)
+    })
+
 
     //save a data in db:
     app.post("/volunteer", async (req, res) => {
@@ -86,11 +90,30 @@ async function run() {
       res.send(result);
     });
 
-    // delete a data :------------------------- 
+    // delete a data :-------------------------
     app.delete("/volunteer/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await volunteerCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.put("/volunteer/:id", async (req, res) => {
+      const id = req.params.id;
+      const volunteerData = req.body;
+      const query = { _id: new ObjectId(id) };
+      const option = { upsert: true };
+      const updateDoc = {
+        $set: {
+          ...volunteerData,
+        },
+      };
+
+      const result = await volunteerCollection.updateOne(
+        query,
+        updateDoc,
+        option
+      );
       res.send(result);
     });
 
