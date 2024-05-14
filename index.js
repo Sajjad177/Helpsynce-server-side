@@ -14,6 +14,8 @@ const corsOptions = {
     "http://localhost:5176",
     "http://localhost:5173",
     "http://localhost:5174",
+    "https://assignment-11-a2b0e.web.app",
+    "https://assignment-11-a2b0e.firebaseapp.com",
   ],
   credentials: true,
   optionSuccessStatus: 200,
@@ -62,7 +64,7 @@ async function run() {
     const requestCollection = db.collection("requested");
 
     //jwt generate:
-    app.post("/jwt",  async (req, res) => {
+    app.post("/jwt", async (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "7d",
@@ -132,7 +134,7 @@ async function run() {
     });
 
     // post a request data in db with new collection:---------------
-    app.post("/request",  async (req, res) => {
+    app.post("/request", async (req, res) => {
       const requestData = req.body;
       const id = req.params.id;
       const volunteerId = new ObjectId(requestData.DataId);
@@ -192,7 +194,7 @@ async function run() {
       res.send(result);
     });
 
-    app.put("/volunteer/:id",verifyToken, async (req, res) => {
+    app.put("/volunteer/:id", async (req, res) => {
       const id = req.params.id;
       const volunteerData = req.body;
       const query = { _id: new ObjectId(id) };
