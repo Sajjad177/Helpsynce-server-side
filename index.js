@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const port = process.env.PORT || 9000;
@@ -11,6 +13,7 @@ const corsOptions = {
     "http://localhost:5175",
     "http://localhost:5176",
     "http://localhost:5173",
+    "http://localhost:5174",
   ],
   credentials: true,
   optionSuccessStatus: 200,
@@ -18,6 +21,26 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
+
+const verifyToken = (req, res, next) => {
+  console.log("I am middleware");
+  const token = req.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ massage: "Unauthorize access" });
+  }
+  if (token) {
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
+      if (error) {
+        console.log(error);
+        return res.status(401).send({ massage: "Unauthorize access" });
+      }
+      console.log(decoded);
+      req.user = decoded;
+      next();
+    });
+  }
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ak8qibp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -34,10 +57,38 @@ async function run() {
   try {
     await client.connect();
 
-    // const volunteerCollection = client.db("helpSync").collection("volunteers");
     const db = client.db("helpSync");
     const volunteerCollection = db.collection("volunteers");
     const requestCollection = db.collection("requested");
+
+    //jwt generate:
+    app.post("/jwt",  async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "7d",
+      });
+
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
+    });
+
+    // Clear token on logout:----------
+    app.get("/logout", (req, res) => {
+      res
+        .clearCookie("token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+          maxAge: 0,
+        })
+
+        .send({ success: true });
+    });
 
     //search function get the title:
     app.get("/volunteers", async (req, res) => {
@@ -58,8 +109,13 @@ async function run() {
     });
 
     // get all posted by a specific user:
-    app.get("/volunteers/:email", async (req, res) => {
+    app.get("/volunteers/:email", verifyToken, async (req, res) => {
+      const tokenEmail = req.user.email;
       const email = req.params.email;
+
+      if (tokenEmail !== email) {
+        return res.status(403).send({ massage: "Forbidden Access" });
+      }
       const query = { "contact.email": email };
       const result = await volunteerCollection.find(query).toArray();
       // console.log("specific data", result);
@@ -76,31 +132,30 @@ async function run() {
     });
 
     // post a request data in db with new collection:---------------
-    app.post('/request', async(req, res) => {
+    app.post("/request",  async (req, res) => {
       const requestData = req.body;
-        const id = req.params.id
-        const volunteerId = new ObjectId(requestData.DataId);
-        await volunteerCollection.updateOne(
-          { _id: volunteerId },
-          {
-            $inc:{
-              number_Need:-1
-            }
-          }
-        )
-        const result = await requestCollection.insertOne(requestData)
-        res.send(result)
-    })
+      const id = req.params.id;
+      const volunteerId = new ObjectId(requestData.DataId);
+      await volunteerCollection.updateOne(
+        { _id: volunteerId },
+        {
+          $inc: {
+            number_Need: -1,
+          },
+        }
+      );
+      const result = await requestCollection.insertOne(requestData);
+      res.send(result);
+    });
 
     // get a data from new collection in db
-    app.get("/request/:email", async (req, res) => {
+    app.get("/request/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const result = await requestCollection.find(query).toArray();
       // console.log("specific data", result);
       res.send(result);
     });
-
 
     //get all request user by email in db:
     app.get("/my-volunteerReq/:email", async (req, res) => {
@@ -111,16 +166,14 @@ async function run() {
       res.send(result);
     });
 
-
     // delete from new collection:
     app.delete("/my-volunteerReq/:id", async (req, res) => {
       const id = req.params.id;
-      console.log('the delete id is--------',id)
+      console.log("the delete id is--------", id);
       const query = { _id: new ObjectId(id) };
       const result = await requestCollection.deleteOne(query);
       res.send(result);
     });
-
 
     //save a data in db:
     app.post("/volunteer", async (req, res) => {
@@ -139,7 +192,7 @@ async function run() {
       res.send(result);
     });
 
-    app.put("/volunteer/:id", async (req, res) => {
+    app.put("/volunteer/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const volunteerData = req.body;
       const query = { _id: new ObjectId(id) };
