@@ -26,7 +26,6 @@ app.use(express.json());
 app.use(cookieParser());
 
 const verifyToken = (req, res, next) => {
-  console.log("I am middleware");
   const token = req.cookies?.token;
   if (!token) {
     return res.status(401).send({ massage: "Unauthorize access" });
@@ -34,14 +33,18 @@ const verifyToken = (req, res, next) => {
   if (token) {
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
       if (error) {
-        console.log(error);
         return res.status(401).send({ massage: "Unauthorize access" });
       }
-      console.log(decoded);
       req.user = decoded;
       next();
     });
   }
+};
+
+const cookieOption = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
 };
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ak8qibp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -57,7 +60,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("helpSync");
     const volunteerCollection = db.collection("volunteers");
@@ -70,27 +73,18 @@ async function run() {
         expiresIn: "7d",
       });
 
+      res.cookie("token", token, cookieOption).send({ success: true });
+    });
+
+    app.post("/logout", async (req, res) => {
+      const user = req.body;
+      console.log("logging out", user);
       res
-        .cookie("token", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-        })
+        .clearCookie("token", { ...cookieOption, maxAge: 0 })
         .send({ success: true });
     });
 
-    // Clear token on logout:----------
-    app.get("/logout", (req, res) => {
-      res
-        .clearCookie("token", {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-          maxAge: 0,
-        })
 
-        .send({ success: true });
-    });
 
     //search function get the title:
     app.get("/volunteers", async (req, res) => {
@@ -111,16 +105,10 @@ async function run() {
     });
 
     // get all posted by a specific user:
-    app.get("/volunteers/:email", verifyToken, async (req, res) => {
-      const tokenEmail = req.user.email;
+    app.get("/volunteers/:email", async (req, res) => {
       const email = req.params.email;
-
-      if (tokenEmail !== email) {
-        return res.status(403).send({ massage: "Forbidden Access" });
-      }
       const query = { "contact.email": email };
       const result = await volunteerCollection.find(query).toArray();
-      // console.log("specific data", result);
       res.send(result);
     });
 
@@ -171,7 +159,7 @@ async function run() {
     // delete from new collection:
     app.delete("/my-volunteerReq/:id", async (req, res) => {
       const id = req.params.id;
-      console.log("the delete id is--------", id);
+      // console.log("the delete id is--------", id);
       const query = { _id: new ObjectId(id) };
       const result = await requestCollection.deleteOne(query);
       res.send(result);
@@ -213,7 +201,7 @@ async function run() {
       res.send(result);
     });
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
